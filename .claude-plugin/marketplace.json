@@ -1,0 +1,17 @@
+{
+  "name": "workflow-latency",
+  "owner": {
+    "name": "jelitz"
+  },
+  "metadata": {
+    "description": "Claude Code Workflow 스크립트의 지연을 줄이는 작성 절차 skill"
+  },
+  "plugins": [
+    {
+      "name": "workflow-latency",
+      "source": "./",
+      "description": "Workflow 도구용 스크립트를 쓰기 전에 보는 체크리스트. 에이전트 프롬프트의 실행 방식, 슬라이스 정의, 긴 명령 처리, 검증 루프를 다룬다",
+      "category": "productivity"
+    }
+  ]
+}
