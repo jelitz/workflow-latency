@@ -1,7 +1,7 @@
 {
   "name": "workflow-latency",
   "description": "Workflow 도구용 스크립트를 쓰기 전에 보는 체크리스트. 에이전트 프롬프트의 실행 방식, 슬라이스 정의, 긴 명령 처리, 검증 루프를 다룬다",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "jelitz"
   },

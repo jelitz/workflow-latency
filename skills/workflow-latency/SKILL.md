@@ -11,7 +11,7 @@ description: Workflow 도구용 스크립트를 쓰기 직전에 workflow-author
 
 ## 1. 실행 방식을 프롬프트 상수로 고정한다
 
-모든 `agent()` 프롬프트 앞에 같은 문구를 붙인다. 기계적 단계(목록, 추출, 분류)는 `sonnet` + `effort: 'low'`로 두고, 판정·적대적 검증 단계는 세션 모델과 높은 effort를 유지한다. 측정한 실행에서는 리뷰 에이전트 36개가 모두 effort high로 돌아 중앙값 35분이 걸렸다.
+모든 `agent()` 프롬프트 앞에 같은 문구를 붙인다. `agent()`의 `model`·`effort`를 생략하면 세션 값을 물려받지 않는다: model은 호출 시 값 → 에이전트 정의 frontmatter → `CLAUDE_CODE_SUBAGENT_MODEL` → 세션 모델 순으로 정해지고(공식 sub-agents 문서 "Choose a model"), effort는 그 모델의 기본값이 된다(Claude Code 2.1.312 실측). 단계마다 품질을 지키는 가장 싼 조합을 고르고, 세션 모델이 필요하면 같은 계열 별칭을 준다. 아래 `CHEAP`은 기계적 단계에 쓰는 예시다. 측정한 실행에서는 리뷰 에이전트 36개가 모두 effort high로 돌아 중앙값 35분이 걸렸다.
 
 ```js
 const EXEC = '실행 방식: 파일 읽기와 검색은 Read·Grep·Glob으로 한다. Bash는 실행이 필요할 때만 쓴다. '
