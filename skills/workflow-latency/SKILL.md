@@ -11,7 +11,7 @@ description: Workflow 도구용 스크립트를 쓰기 직전에 workflow-author
 
 ## 1. 실행 방식을 프롬프트 상수로 고정한다
 
-모든 `agent()` 프롬프트 앞에 같은 문구를 붙인다. `agent()`의 `model`·`effort`를 생략하면 세션 값을 물려받지 않는다: model은 호출 시 값 → 에이전트 정의 frontmatter → `CLAUDE_CODE_SUBAGENT_MODEL` → 세션 모델 순으로 정해지고(공식 sub-agents 문서 "Choose a model"), effort는 그 모델의 기본값이 된다(Claude Code 2.1.312 실측). 단계마다 품질을 지키는 가장 싼 조합을 고르고, 세션 모델이 필요하면 같은 계열 별칭을 준다. 아래 `CHEAP`은 기계적 단계에 쓰는 예시다. 측정한 실행에서는 리뷰 에이전트 36개가 모두 effort high로 돌아 중앙값 35분이 걸렸다.
+모든 `agent()` 프롬프트 앞에 같은 문구를 붙인다. `agent()`의 `model`을 생략하면 세션 값을 물려받지 않는다: model은 호출 시 값 → 에이전트 정의 frontmatter → `CLAUDE_CODE_SUBAGENT_MODEL` → 세션 모델 순으로 정해진다(공식 sub-agents 문서 "Choose a model"). `effort`를 생략하면 서브에이전트 모델이 메인 대화와 다를 때는 그 모델의 `modelSettings` 저장값, 없으면 그 모델의 기본값이 되고(Claude Code 2.1.317 changelog), 같은 모델이면 세션 effort를 따른다(Agent 도구 전사 기록 기준, Workflow `agent()`는 미실측). 단계마다 품질을 지키는 가장 싼 조합을 고르고, 세션 모델이 필요하면 같은 계열 별칭을 준다. 아래 `CHEAP`은 기계적 단계에 쓰는 예시다. 측정한 실행에서는 리뷰 에이전트 36개가 모두 effort high로 돌아 중앙값 35분이 걸렸다.
 
 ```js
 const EXEC = '실행 방식: 파일 읽기와 검색은 Read·Grep·Glob으로 한다. Bash는 실행이 필요할 때만 쓴다. '
