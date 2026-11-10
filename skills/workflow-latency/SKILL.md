@@ -11,7 +11,7 @@ description: Workflow 도구용 스크립트를 쓰기 직전에 workflow-author
 
 ## 1. 실행 방식을 프롬프트 상수로 고정한다
 
-모든 `agent()` 프롬프트 앞에 같은 문구를 붙인다. `agent()`의 `model`을 생략하면 세션 값을 물려받지 않는다: model은 호출 시 값 → 에이전트 정의 frontmatter → `CLAUDE_CODE_SUBAGENT_MODEL` → 세션 모델 순으로 정해진다(공식 sub-agents 문서 "Choose a model"). `effort`를 생략하면 서브에이전트 모델이 메인 대화와 다를 때는 그 모델의 `modelSettings` 저장값, 없으면 그 모델의 기본값이 되고(Claude Code 2.1.317 changelog), 같은 모델이면 세션 effort를 따른다(Agent 도구 전사 기록 기준, Workflow `agent()`는 미실측). 단계마다 품질을 지키는 가장 싼 조합을 고르고, 세션 모델이 필요하면 같은 계열 별칭을 준다. 아래 `CHEAP`은 기계적 단계에 쓰는 예시다. 측정한 실행에서는 리뷰 에이전트 36개가 모두 effort high로 돌아 중앙값 35분이 걸렸다.
+모든 `agent()` 프롬프트 앞에 같은 문구를 붙인다. `agent()`의 `model`을 생략하면 세션 값을 물려받지 않는다: model은 호출 시 값 → 에이전트 정의 frontmatter → `CLAUDE_CODE_SUBAGENT_MODEL` → 세션 모델 순으로 정해진다(공식 sub-agents 문서 "Choose a model"). `effort`를 생략하면 서브에이전트 모델이 메인 대화와 다를 때는 그 모델의 `modelSettings` 저장값, 없으면 그 모델의 기본값이 되고(Claude Code 2.1.317 changelog), 같은 모델이면 세션 effort를 따른다(Agent 도구 전사 기록 기준, Workflow `agent()`는 미실측). 단계마다 품질을 지키는 가장 싼 조합을 고르고, 세션 모델이 필요하면 같은 계열 별칭을 준다. 아래 `CHEAP`은 기계적 단계에 쓰는 예시다.
 
 ```js
 const EXEC = '실행 방식: 파일 읽기와 검색은 Read·Grep·Glob으로 한다. Bash는 실행이 필요할 때만 쓴다. '
@@ -27,12 +27,15 @@ const CHEAP = { model: 'sonnet', effort: 'low' }
 
 ## 3. 슬라이스는 열거된 목록으로만 정의한다
 
-"그 외 전부" 슬라이스는 같은 단계의 다른 슬라이스 중앙값의 6.8배, 5.2배가 걸렸다. 목록이 없으면 싼 에이전트로 먼저 목록을 만들고 그 목록으로 쪼갠다.
+"그 외 전부" 슬라이스는 같은 단계의 다른 슬라이스 중앙값의 6.8배, 5.2배가 걸렸다. 목록이 없으면 싼 에이전트로 먼저 목록을 만들고 그 목록으로 쪼갠다. 항목 수가 곧 에이전트 수는 아니다. 항목을 작업량이 비슷한 묶음으로 나눠 슬라이스를 만든다. 아래 예시의 묶음 크기 8은 정해진 값이 아니다.
 
 ```js
 const LIST = { type: 'object', properties: { items: { type: 'array', items: { type: 'string' } } }, required: ['items'] }
 const listed = await ask('스키마의 모든 테이블을 항목 하나에 테이블 하나로 나열하라.', { ...CHEAP, schema: LIST })
-const results = await pipeline(listed.items, item => ask(`테이블 ${item}을 분석하라.`, { label: item, schema: RESULT }))
+const chunks = []
+for (let i = 0; i < listed.items.length; i += 8) chunks.push(listed.items.slice(i, i + 8))
+const results = await pipeline(chunks, (chunk, _, i) =>
+  ask(`다음 테이블을 각각 분석하라: ${chunk.join(', ')}`, { label: `tables ${i + 1}`, schema: RESULT }))
 ```
 
 ## 4. 입력 자료는 항목별 파일로 나눠 준다
@@ -41,19 +44,24 @@ const results = await pipeline(listed.items, item => ask(`테이블 ${item}을 �
 
 ## 5. 검증 → 수정 → 재검증은 blocker·major가 남은 동안만 반복한다
 
-반복 횟수에 상한을 두지 않는다. minor만 남으면 끝낸다. 수정 단계도 구현 단계와 같은 파일 소유 분할로 병렬화하고, 재검증은 수정한 파일과 회귀 표본으로 한정한다. 측정한 85분짜리 루프는 개인정보 노출 blocker 1건을 포함해 결함 43건을 실제로 잡았다.
+minor만 남으면 끝낸다. 두 회차 연속으로 건수가 줄지 않으면 루프를 멈추고 남은 항목을 메인 루프에 돌려준다. 3회차를 넘기면 계속할지를 메인 루프가 정한다. 수정 단계도 구현 단계와 같은 파일 소유 분할로 병렬화하고, 재검증은 수정한 파일과 회귀 표본으로 한정한다. 측정한 85분짜리 루프는 개인정보 노출 blocker 1건을 포함해 결함 43건을 실제로 잡았다.
 
 ```js
 const open = fs => fs.filter(f => f.severity === 'blocker' || f.severity === 'major')
 let found = open(await verifyAll())
-for (let round = 1; found.length; round++) {
+let stalled = 0
+for (let round = 1; found.length && round <= 3 && stalled < 2; round++) {
   log(`${round}회차: blocker/major ${found.length}건`)
+  const before = found.length
   const byOwner = {}
   found.forEach(f => { (byOwner[f.owner] = byOwner[f.owner] || []).push(f) })
   await parallel(Object.entries(byOwner).map(([owner, fs]) => () =>
     ask(`${owner}이 소유한 파일만 고친다: ${JSON.stringify(fs)}`, { label: `fix:${owner}` })))
   found = open(await reverify(Object.keys(byOwner)))
+  stalled = found.length >= before ? stalled + 1 : 0
 }
+if (found.length) log(`미해결 blocker/major ${found.length}건을 메인 루프에 돌려준다`)
+// 반환값에 found를 넣어 메인 루프가 계속할지 정하게 한다
 ```
 
 ## 6. 쪼개기는 직렬 구간이 클 때만 효과가 있다
